@@ -7,6 +7,8 @@ from sklearn.metrics import accuracy_score, recall_score, precision_score, f1_sc
 import matplotlib.pyplot as plt
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
+from sklearn.preprocessing import StandardScaler
+import numpy as np
 
 # Configuration de l'interface Streamlit
 st.title("Analyse et Imputation des Données Manquantes")
@@ -113,6 +115,106 @@ if st.button("Comparer les performances des méthodes KNN et MLP"):
             st.pyplot(fig)
         else:
             st.write("Erreur : Veuillez imputer les données avant de comparer les méthodes.")
+
+            st.write("### Stratégie de répartition des données manquantes :")
+            strategy = st.radio("Choisissez une stratégie :", ["Test", "Entraînement", "Aléatoire"])
+
+            if strategy == "Test":
+                # Forcer les données manquantes dans le jeu de test
+                x_train, x_test, y_train, y_test = train_test_split(X, Y, test_size=0.3)
+                x_test.iloc[:, :3] = None  # Exemple simple
+            elif strategy == "Entraînement":
+                # Forcer les données manquantes dans le jeu d'entraînement
+                x_train, x_test, y_train, y_test = train_test_split(X, Y, test_size=0.3)
+                x_train.iloc[:, :3] = None
+            elif strategy == "Aléatoire":
+                # Introduire des valeurs manquantes aléatoires
+                data.iloc[:, :3] = data.iloc[:, :3].mask(np.random.random(data.iloc[:, :3].shape) < 0.2)
+
+
+            if st.button("Comparer les modèles"):
+                knn_metrics = [acc, rec, prec, f1]
+                mlp_metrics = [accuracy_score(y_test, y_pred), recall_score(y_test, y_pred), ...]
+
+                fig, ax = plt.subplots()
+                ax.bar(["KNN", "MLP"], [knn_metrics[0], mlp_metrics[0]], color=['blue', 'green'])
+                ax.set_title("Comparaison des performances (Accuracy)")
+                st.pyplot(fig)
+
+
+# Étape 3 : Standardisation des données
+if st.button("Standardiser les données"):
+    if uploaded_file is not None:
+        if st.session_state.data_imputed is not None:
+            clean_data = st.session_state.data_imputed.dropna()
+
+            # Séparer les features et la cible
+            X = clean_data.iloc[:, :-1].values
+            Y = pd.get_dummies(clean_data.iloc[:, -1]).values
+
+            # Standardisation
+            scaler = StandardScaler()
+            X_std = scaler.fit_transform(X)
+
+            st.write("### Données après standardisation :")
+            st.write(pd.DataFrame(X_std, columns=clean_data.columns[:-1]))
+
+            # Séparation des données standardisées
+            x_train_std, x_test_std, y_train, y_test = train_test_split(X_std, Y, test_size=0.3)
+
+            # ---- Modèle KNN (standardisé) ----
+            knn_std = KNeighborsClassifier(n_neighbors=5)
+            knn_std.fit(x_train_std, y_train.argmax(axis=1))
+            y_pred_knn_std = knn_std.predict(x_test_std)
+
+            acc_knn_std = accuracy_score(y_test.argmax(axis=1), y_pred_knn_std)
+            rec_knn_std = recall_score(y_test.argmax(axis=1), y_pred_knn_std, average='macro')
+            prec_knn_std = precision_score(y_test.argmax(axis=1), y_pred_knn_std, average='macro')
+            f1_knn_std = f1_score(y_test.argmax(axis=1), y_pred_knn_std, average='macro')
+
+            st.write(f"### Précision (Accuracy) du modèle KNN (standardisé) : {acc_knn_std:.4f}")
+
+            # ---- Modèle MLP (standardisé) ----
+            model_std = Sequential([
+                Dense(64, activation='relu', input_shape=(X_std.shape[1],)),
+                Dense(32, activation='relu'),
+                Dense(Y.shape[1], activation='softmax')
+            ])
+            model_std.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+            model_std.fit(x_train_std, y_train, epochs=50, batch_size=32, verbose=0)
+
+            y_pred_mlp_std = model_std.predict(x_test_std).argmax(axis=1)
+            y_test_decoded_std = y_test.argmax(axis=1)
+
+            acc_mlp_std = accuracy_score(y_test_decoded_std, y_pred_mlp_std)
+            rec_mlp_std = recall_score(y_test_decoded_std, y_pred_mlp_std, average='macro')
+            prec_mlp_std = precision_score(y_test_decoded_std, y_pred_mlp_std, average='macro')
+            f1_mlp_std = f1_score(y_test_decoded_std, y_pred_mlp_std, average='macro')
+
+            st.write(f"### Précision (Accuracy) du modèle MLP (standardisé) : {acc_mlp_std:.4f}")
+
+            # ---- Visualisation des résultats ----
+            metrics = ['Accuracy', 'Recall', 'Precision', 'F1 Score']
+            knn_std_scores = [acc_knn_std, rec_knn_std, prec_knn_std, f1_knn_std]
+            mlp_std_scores = [acc_mlp_std, rec_mlp_std, prec_mlp_std, f1_mlp_std]
+
+            fig, ax = plt.subplots(figsize=(8, 5))
+            bar_width = 0.35
+            index = range(len(metrics))
+
+            ax.bar(index, knn_std_scores, bar_width, label='KNN (Standardisé)', alpha=0.7, color='purple')
+            ax.bar([i + bar_width for i in index], mlp_std_scores, bar_width, label='MLP (Standardisé)', alpha=0.7, color='orange')
+
+            ax.set_xlabel('Metrics')
+            ax.set_ylabel('Scores')
+            ax.set_title('Comparaison des performances entre KNN et MLP (Standardisé)')
+            ax.set_xticks([i + bar_width / 2 for i in index])
+            ax.set_xticklabels(metrics)
+            ax.legend()
+
+            st.pyplot(fig)
+        else:
+            st.write("Erreur : Veuillez imputer les données avant de les standardiser.")
     else:
         st.write("Erreur : Aucun fichier chargé.")
 
