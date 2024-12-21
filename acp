@@ -1,0 +1,72 @@
+from numpy.linalg import eig, norm, det
+
+# 1. Calcul de la moyenne de chaque feature (pixel)
+mean_face = np.mean(X_train_scaled, axis=0)
+
+# 2. Centrage des données (soustraction de la moyenne)
+X_centered = X_train_scaled - mean_face
+
+# 3. Calcul de l'écart-type de chaque feature
+std_face = np.std(X_train_scaled, axis=0)
+
+# 4. Réduction des données (division par l'écart-type)
+X_centered_reduced = X_centered / std_face
+
+# Remplacement des NaN (division par 0) par 0 (features constantes)
+X_centered_reduced = np.nan_to_num(X_centered_reduced)
+
+# 5. Calcul de la matrice de corrélation R
+n_samples = X_centered_reduced.shape[0]
+R = (1 / n_samples) * np.dot(X_centered_reduced.T, X_centered_reduced)
+
+# 6. Calcul des valeurs propres par résolution de det(R - λI) = 0
+I = np.identity(R.shape[0])
+lambda_values, eigenvectors = eig(R)
+
+# 7. Tri des valeurs propres et vecteurs propres
+sorted_indices = np.argsort(lambda_values)[::-1]  # Tri décroissant
+sorted_eigenvalues = lambda_values[sorted_indices]
+sorted_eigenvectors = eigenvectors[:, sorted_indices]
+
+# 8. Calcul de la qualité de représentation (Qj) et sélection des composantes
+explained_variance_ratio = sorted_eigenvalues / np.sum(sorted_eigenvalues)
+cumulative_variance = np.cumsum(explained_variance_ratio)
+
+n_components = 0
+for i in range(len(cumulative_variance)):
+    if cumulative_variance[i] >= 0.80:
+        n_components = i + 1
+        break
+
+print(f"Nombre de composantes sélectionnées pour couvrir 80% de la variance : {n_components}")
+
+# 9. Calcul des vecteurs propres pour les composantes sélectionnées
+selected_vectors = sorted_eigenvectors[:, :n_components]
+
+# 10. Normalisation des vecteurs propres
+normalized_vectors = selected_vectors / norm(selected_vectors, axis=0)
+
+# 11. Projection des données (X_train et X_test) dans le nouvel espace de dimension réduite
+X_train_pca = np.dot(X_centered_reduced, normalized_vectors)
+X_test_centered = X_test_scaled - mean_face
+X_test_reduced = X_test_centered / std_face
+X_test_pca = np.dot(X_test_reduced, normalized_vectors)
+
+print(f"Dimensions après PCA: {X_train_pca.shape}")
+
+# 12. Calcul des composantes principales Ck
+Ck = np.dot(X_centered_reduced, normalized_vectors)
+
+# 13. Calcul du cercle de corrélation
+correlation_circle = normalized_vectors * np.sqrt(sorted_eigenvalues[:n_components])
+
+# Visualisation du cercle de corrélation
+plt.figure(figsize=(8, 8))
+plt.quiver(np.zeros(n_components), np.zeros(n_components), correlation_circle[0, :], correlation_circle[1, :], angles='xy', scale_units='xy', scale=1)
+plt.xlim(-1, 1)
+plt.ylim(-1, 1)
+plt.xlabel('Composante principale 1')
+plt.ylabel('Composante principale 2')
+plt.title('Cercle de corrélation')
+plt.grid()
+plt.show()
